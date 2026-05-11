@@ -18,7 +18,7 @@ Sharing a free reference for anyone integrating with the ServiceTitan Pricebook 
 
 Six months of production lessons from a multi-trade tenant, sanitized for public release. MIT-licensed, PRs welcome with verified-on-prod observations from your tenant.
 
-<repo URL>
+https://github.com/lpeluso-dotcom/claude-skill-st-pricebook
 
 ---
 

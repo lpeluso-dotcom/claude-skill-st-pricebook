@@ -17,7 +17,7 @@ Just open-sourced a Claude Code skill that captures ~6 months of production Serv
 • Dated incident appendix so you don't repeat my mistakes
 
 MIT, contributions welcome:
-<repo URL>
+https://github.com/lpeluso-dotcom/claude-skill-st-pricebook
 
 ---
 

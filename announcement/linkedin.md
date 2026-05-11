@@ -10,7 +10,7 @@ Just open-sourced everything I learned about that catalog of pain (and the patte
 
 If you integrate with ServiceTitan, this might save you a few quarters of debugging.
 
-MIT-licensed, contributions welcome: <repo URL>
+MIT-licensed, contributions welcome: https://github.com/lpeluso-dotcom/claude-skill-st-pricebook
 
 #ServiceTitan #HomeServices #ClaudeCode #API #FieldServiceManagement
 
