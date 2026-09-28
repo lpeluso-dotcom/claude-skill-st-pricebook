@@ -20,13 +20,14 @@ The defining characteristic of these gotchas: **the API returns HTTP 200 OK with
 
 | Endpoint | Field | Drops on POST? | Drops on PATCH? | Workaround | First seen / Re-verified |
 |---|---|---|---|---|---|
-| `/services` | `cost` | yes | yes | UI-only, OR design around dynamic pricing (cost flows in via `serviceMaterials`) | 2026-04-17, re-verified 2026-05-08 |
+| `/services` | `cost` | yes | yes | Use the UI, or the internal service edit (`EditService`, the cookie-auth API the UI uses). A full-model diff after an internal edit showed only `Cost` changed (16 services, 2026-09-27). Or design around dynamic pricing, where cost comes in through `serviceMaterials`. | 2026-04-17, re-verified 2026-05-08; internal path 2026-09-27 |
 | `/services` | `useStaticPrice` (singular) | yes | yes | Use `useStaticPrices` (plural). Even then, doesn't flip on freshly-created services. | 2026-05-08 |
 | `/services` | `useStaticPrices` (plural) on freshly-created service | n/a | yes | Set in UI at creation time. Cannot be flipped via API after the service is created. | 2026-05-08 |
 | `/services` | `price` (on dynamic-pricing service, `useStaticPrices=false` or `null`) | n/a | yes | Static prices only stick when `useStaticPrices=true` — which can't be flipped via API. UI is the workaround. | 2026-04-17 |
 | `/materials` | `name` | yes | accepts | Use `displayName` on POST. PATCH `name` afterward if needed. | 2026-04 |
 | `/materials` | `categoryId` (singular, integer field) | yes | n/a | POST without it. Then PATCH `categories: [<int>]` (bare integer array — see "categories shape" entry below) | 2026-04 |
 | `/materials`, `/equipment` | `vendors: [...]` | yes | yes | Root-level `primaryVendor: { vendorId, cost, active }` (singular object). Without it on POST, ST returns 400 "There must be exactly one vendor selected as Primary" AND rolls back the create — follow-up GET on Sku.Id 404s. | canonical schema doc |
+| `/materials`, `/equipment` | `primaryVendor.vendorPart` | accepts | accepts | Not a drop. Listed here because it is easy to miss: PATCH `{cost, primaryVendor: {vendorId, vendorPart, cost, active}}` sets the item cost and the vendor part number together. Read-back matched on 13 of 13 items. | 2026-09-27 |
 | `/materials`, `/equipment` | `vendorPricingLinks: [...]` | yes | yes | Same as `vendors:` — `primaryVendor` is the only writable vendor field. `vendorPricingLinks` is the read shape only. | canonical schema doc |
 | `/equipment` | `typeId` | yes | yes | UI-only: Pricebook → Equipment → [item] → Type dropdown. | 2026-04 |
 | `/equipment` | `equipmentTypeId`, `type`, `equipmentType` (misspellings) | yes | yes | None — these aren't ST field names. Use `typeId` (UI-only) | 2026-04 |
@@ -100,3 +101,5 @@ Some related ST gotchas live in adjacent reference files:
 - **Estimate template internal API read↔write asymmetries** (`skuReference` wrapping, `isAddon` case, `summary` ↔ `description`) — these aren't drops, they're shape mismatches that return 500 NRE. See [`estimate-and-proposal-templates.md`](estimate-and-proposal-templates.md).
 - **Service-link removal pattern** (no DELETE endpoint; GET → filter → PATCH full array) — not a silent drop, just a missing verb. See [`service-links.md`](service-links.md).
 - **Dynamic vs static pricing model** (`useStaticPrices` tri-state) — see [`cost-and-pricing.md`](cost-and-pricing.md).
+- **Read-side misreport: `useStaticPrices`.** The public API returned `null` on services that the internal read showed as `UseStaticPrice = true` (2026-09-27). This is not a write drop, but it breaks any audit that relies on the public field. See [`cost-and-pricing.md`](cost-and-pricing.md).
+- **Writes that change more than you asked for.** A kit PATCH can reprice linked estimate templates with no template write. See [`estimate-and-proposal-templates.md`](estimate-and-proposal-templates.md).

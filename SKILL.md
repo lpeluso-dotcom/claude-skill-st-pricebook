@@ -55,7 +55,7 @@ ST returns 200 OK and silently drops these. The full catalog is in [`references/
 
 | Endpoint | Field | Drops on | Workaround |
 |---|---|---|---|
-| `/services` | `cost` | POST, PATCH | UI-only, or rely on dynamic pricing |
+| `/services` | `cost` | POST, PATCH | UI or internal `EditService`, or rely on dynamic pricing |
 | `/services` | `useStaticPrice` (singular) | POST, PATCH | Use plural `useStaticPrices` — but it still won't flip post-create |
 | `/services` (fresh) | `useStaticPrices` | PATCH | Set in UI at creation time; can't flip via API after |
 | `/materials` | `name` | POST | Use `displayName` on POST; `name` works on PATCH |
@@ -69,10 +69,20 @@ ST returns 200 OK and silently drops these. The full catalog is in [`references/
 Most established ST tenants run on **dynamic pricing**: `useStaticPrices` is `null` (or `false`) on every service, and the customer price is computed at invoice time from cost + markup rules. In this model:
 
 - `price` on a service is `0` by design. Don't flag it as a bug.
+- The public API can report `useStaticPrices: null` on a service that is actually static, even static at $0. Confirm with the internal service read before you audit static pricing.
 - `cost` is what matters — but ST silently drops it on POST and PATCH (see catalog). Materials drive the real cost number through `serviceMaterials` linking.
 - Equipment is **always** statically priced — both `price` and `cost` matter and stick.
 
 Decision tree, detection patterns, and tri-state behavior: [`references/cost-and-pricing.md`](references/cost-and-pricing.md).
+
+## New items: one governed door
+
+Recurring creation defects (missing labor cost, wrong tax flag, no vendor part, per-100 units priced per unit, doubled kit materials, copy-paste descriptions) stop only when **every** new item enters through one pipeline with gates: reconcile → normalize → policy → enrich → approve → write → verify → watch. Two effects to plan for:
+
+- **Kit edits reprice linked estimate templates** without a template write (observed 2026-09-27). Read back the templates as part of every kit write.
+- **Provider syncs can revert kit fixes** on provider-sourced services. Put each deliberate fix under a nightly drift watch.
+
+Full pattern: [`references/governed-ingest.md`](references/governed-ingest.md).
 
 ## D1 (or any database) mirror pattern
 
@@ -97,6 +107,7 @@ Recommended pattern for low-latency reads and semantic search:
 | Categories — walking the tree, renames, deactivation pattern | [`references/category-discovery.md`](references/category-discovery.md) |
 | `serviceMaterials[]` / `serviceEquipment[]` — adding, removing, orphans | [`references/service-links.md`](references/service-links.md) |
 | Estimate templates / proposals — internal API, read↔write asymmetries | [`references/estimate-and-proposal-templates.md`](references/estimate-and-proposal-templates.md) |
+| One-door ingest pipeline for new items: gates, policy table, cost sources, drift watch | [`references/governed-ingest.md`](references/governed-ingest.md) |
 | Dated incidents with lessons | [`references/incidents-and-lessons.md`](references/incidents-and-lessons.md) |
 
 ## MCP tool map (when using an MCP server)
@@ -110,6 +121,7 @@ If you've built or are using an MCP wrapper around ST writes, map the tool to th
 | `st_patch_material` | Category object-shape rejection, vendor-array drops |
 | `st_create_material` | `name` drops (use `displayName`), `categoryId` (singular) drops, must include `primaryVendor` object or ST rolls back the create |
 | `st_patch_equipment` | `typeId` drops, `variationsOrConfigurableEquipment` drops, `isConfigurable` (misspelled) drops |
+| `st_create_equipment` | Must target `/pricebook/v2/.../equipment`. `/equipmentmanagement/` is equipment installed at customer locations, not pricebook items. |
 | `update_estimate_status` (or equiv.) | `status` PATCH drops — switch to `PUT /sell` / `/dismiss` / `/unsell` |
 
 The wrapper returning HTTP 200 is **not** confirmation the field stuck. Read-after-write hash compare is the only reliable signal.
@@ -124,7 +136,7 @@ For any non-trivial write (multi-row, multi-field, or cross-table):
 4. **dryRun** — for each row, compute the proposed PATCH/POST body, diff against current state using only writable fields. Skip rows where the diff is empty. Surface a summary to the operator.
 5. **Confirm token** — operator signs off. If using HMAC tokens, generate one bound to the dryRun hash; if not, just a "type CONFIRM to proceed" prompt.
 6. **Execute in chunks** — POST/PATCH in batches of ~25, GET + hash-compare each, log per-row outcome. On hash mismatch (silent-fail) treat the row as FAILED even if HTTP was 200.
-7. **Reconcile** — refresh your D1 mirror slice for the affected rows. Don't mutate D1 directly; let the mirror catch up from ST.
+7. **Reconcile** — refresh your D1 mirror slice for the affected rows. Don't mutate D1 directly; let the mirror catch up from ST. If you changed kit links, also read back the linked estimate templates.
 
 The full implementation pattern (in any framework, with QSC's Cloudflare Workers example): [`references/write-safety.md`](references/write-safety.md).
 

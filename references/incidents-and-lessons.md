@@ -165,9 +165,82 @@ Captured in [`silent-fail-catalog.md`](silent-fail-catalog.md) and [`estimate-an
 
 ---
 
+## 2026-08-27 — Provider sync reverted kit fixes
+
+**What happened:** On 2026-08-23, three service kits were fixed by removing wrong or doubled material links (for example, a system material listed both on its own and as part of the system). On 2026-08-27, the removed links were back.
+
+**Root cause:** All three services were provider-sourced: `source` named the provider catalog and `externalId` was set. A provider sync restored the provider's version of the kit.
+
+**Detection:** A later audit found the doubled materials again. Nothing had alerted.
+
+**Workaround:** The fixes were applied again a month later, followed by a drift watch with must-not-contain rules on each kit.
+
+**Lesson encoded:**
+- A fix to a provider-owned item is not permanent. Either move the kit to a tenant-owned item, or put the fix under a drift watch.
+- See [`service-links.md`](service-links.md) and [`governed-ingest.md`](governed-ingest.md), gate 8.
+
+---
+
+## 2026-09-26 — Creation-defect audit: the same 12 mistakes, over and over
+
+**What happened:** An audit of recently created pricebook items ranked 12 recurring creation defects. Among them: services with hours but no labor cost, items taxed against policy, no vendor part number, no category, per-100 units priced per unit (which inflated about 49 kits), doubled kit materials, descriptions copied from the display name, and no photo or spec sheet.
+
+**Root cause:** Items entered the book through many side doors: hand creates in the UI, spreadsheet imports, one-off scripts, and a quote-ingest worker. Each door applied, or forgot, its own defaults.
+
+**Lesson encoded:**
+- Fixing rows does not fix the process. Send every new item through **one door** with gates (reconcile, normalize, policy, enrich, approve, write, verify, watch). Then run the existing book through the same gates as backfills.
+- Take defaults from a **policy table**, not from the operator's memory.
+- Every cost carries its source, reference, date, and unit.
+- Full pattern: [`governed-ingest.md`](governed-ingest.md).
+
+---
+
+## 2026-09-27 — Kit edits repriced 48 estimate templates with no template write
+
+**What happened:** A session removed doubled and wrong materials from several water-treatment kits by PATCHing `serviceMaterials`. It did not touch any template. About 30 minutes later, 48 linked estimate templates had changed: the removed lines were gone and the totals had repriced dynamically. A whole-home bundle went from about $15.1K to about $9.3K, and tankless templates dropped about $890 each.
+
+In a separate slice the same day, a kit was relinked to an item live at `cost = 0`. The 17 templates carrying that kit each lost about $317.
+
+**Root cause:** On this tenant, ST propagates kit changes into linked templates. This skill had said the opposite (template prices are snapshots).
+
+**Lesson encoded:**
+- A kit edit is a customer-facing price change. Snapshot and read back linked templates as part of the write.
+- Never link a kit to an item with `cost = 0`.
+- [`estimate-and-proposal-templates.md`](estimate-and-proposal-templates.md) is corrected.
+
+---
+
+## 2026-09-27 — Public API showed `useStaticPrices: null` on services statically priced at $0
+
+**What happened:** A 99-service slice read through both the public API and the internal service read. The internal read showed `UseStaticPrice = true` on 20 services, 17 of them static at **$0**, while dynamic pricing would have given $89–$2,232. The public API showed `useStaticPrices: null` on all 20.
+
+**Root cause:** The public read does not reliably report the static-price flag.
+
+**Lesson encoded:** An audit based on the public API alone misses static-at-$0 services, which are the population most likely to bill at $0. Confirm static pricing from the internal read. See [`cost-and-pricing.md`](cost-and-pricing.md).
+
+---
+
+## 2026-09-27 — Photo reuse copied a generic stock image
+
+**What happened:** An enrichment batch gave services the photo of their source material by PATCHing `{assets}` with the existing ST-hosted asset path. ST accepted it and rehosted the image. Review found that two services had picked up a generic ST stock image that is shared by about 1,052 items. Both were reverted to no image.
+
+**Lesson encoded:** Before reusing an asset path, check it against a list of known shared or stock assets. A shared placeholder is worse than no photo, because it hides the gap from the next photo audit.
+
+---
+
+## 2026-09-27 — Registry stamps keyed by ST id, while the registry held item codes
+
+**What happened:** A durable write path updated its item registry after each PATCH, keyed by the target's ST id. The registry's key column held item codes. No patch through that path was ever stamped. Locks and actor allow-lists on registry rows were never checked for patches either.
+
+**Fix:** Take the item code from the **pre-write read**, not from the ST id and not from anything the caller sends. Use it both to gate the write (locked row or actor not allowed means 0 writes) and to stamp the registry. A missing or mismatched id or code fails closed.
+
+**Lesson encoded:** A gate keyed on the wrong identifier fails open without any error. Test the gate by breaking it on purpose and checking that a test fails.
+
+---
+
 ## Patterns across incidents
 
-Looking at the incident log as a whole, three patterns dominate:
+Looking at the incident log as a whole, four patterns dominate:
 
 ### 1. "200 OK doesn't mean the write stuck"
 
@@ -186,6 +259,12 @@ Appeared in: 2026-05-10 (MCP tool wired to broken PATCH), 2026-04-28 (mapper reg
 Appeared in: 2026-04-13 (D1 staleness), 2026-04-28 (wave-1 mapper drift).
 
 **Defense:** explicit freshness checks — `synced_at` column, daily heartbeats, drift detection — and the discipline to run them before relying on the data.
+
+### 4. "The fix was right, then something else changed it"
+
+Appeared in: 2026-08-27 (a provider sync reverted kit fixes), 2026-09-27 (kit edits repriced templates that nobody wrote to), 2026-09-26 (the same creation defects returned through side doors).
+
+**Defense:** one governed door for new items, read-back of everything a write can reach (not only the item you wrote), and a nightly drift watch seeded with every deliberate fix. See [`governed-ingest.md`](governed-ingest.md).
 
 ---
 
