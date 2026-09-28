@@ -208,9 +208,23 @@ If you're building an MCP tool, plugin, or any abstraction over ST estimates, ma
 Bulk pricing changes flow through estimate templates as well as the pricebook itself. A scenario like "we just raised diagnostic-fee pricing by 10%" requires touching:
 
 1. The `pb_services` items (PATCH each service's `price` if static, or update the cost-per-unit on linked materials if dynamic)
-2. **Every estimate template that references those services** — the per-item `unitPrice` on the template is a *snapshot* of the service price at template-creation time. Updating the pricebook doesn't auto-update existing templates.
+2. **Every estimate template that references those services.** Check each one, because edits can reach templates without a template write (see below).
 
 If you're orchestrating pricebook changes, planning the template-update pass is part of the work. The internal API access pattern (cookies + Playwright) is the path.
+
+### Kit edits reprice linked templates on their own (observed 2026-09-27)
+
+The original guidance here said that a template line's `unitPrice` is a snapshot taken when the template was created, and that pricebook edits never reach existing templates. That is **not always true**. On one production tenant:
+
+- Service kit edits (`serviceMaterials` / `serviceEquipment` PATCHes, including removed lines and retired materials) **propagated to 48 linked estimate templates by themselves, within about 30 minutes**, with no template write. The removed lines disappeared from the templates. The templates were **repriced dynamically**: one bundle template dropped from about $15.1K to about $9.3K, and tankless water-heater templates dropped by about $890 each.
+- In a separate case, a kit was relinked to an item that was live at `cost = 0`. The 17 templates carrying that kit each dropped about $317.
+
+What this means:
+
+- **A kit edit is a customer-facing price change.** Read back the linked templates as part of verifying any kit write, and snapshot their totals before the write.
+- An item with zero cost that is linked into a kit silently lowers every template that uses the kit. Hold kit links to `cost = 0` items.
+- Retire or deactivate a material only after checking that no template still carries it.
+- Do not assume the opposite either. Static-priced lines, and fields other than the kit lines, may still behave as snapshots. Read back and compare on your own tenant before you plan a manual template pass.
 
 ---
 

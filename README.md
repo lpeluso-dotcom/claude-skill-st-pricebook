@@ -14,6 +14,7 @@ If you've ever PATCHed an ST pricebook item, received a 200 OK back, and then qu
 - **Estimate / proposal templates** — the bit that isn't in `/sales/v2/` (lives at internal `/app/api/estimates/templates/*` with read↔write schema asymmetries)
 - **Write safety** — dryRun + HMAC confirmation + read-after-write hash-compare pattern for any framework
 - **Dynamic vs static pricing** — the tri-state `useStaticPrices` model that long-lived ST tenants run on
+- **Governed ingest**: one door for new items, with gates for reconcile, normalize, policy, enrich, approve, write, verify, and drift watch
 - **D1 sync architecture** — schemas, sync endpoints, why pricebook tables typically aren't on a nightly cron
 - **Incident log** — dated postmortems with lessons encoded back into the skill
 
@@ -67,6 +68,7 @@ If you're working in the original QSC repo this skill was extracted from, `local
 | Category tree, IDs, renames | [`references/category-discovery.md`](references/category-discovery.md) |
 | `serviceMaterials` / `serviceEquipment` linking | [`references/service-links.md`](references/service-links.md) |
 | Estimate templates, proposals, status transitions | [`references/estimate-and-proposal-templates.md`](references/estimate-and-proposal-templates.md) |
+| Stop recurring creation defects with a one-door ingest pipeline | [`references/governed-ingest.md`](references/governed-ingest.md) |
 | What we've learned the hard way | [`references/incidents-and-lessons.md`](references/incidents-and-lessons.md) |
 
 ## Contributing

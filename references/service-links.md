@@ -194,8 +194,32 @@ These rows are the most likely "$0 invoice line" candidates.
 
 ---
 
+## Kit edits outside the service itself
+
+Two effects of a link edit happen outside the service you PATCHed. Both were verified on 2026-09-27.
+
+### Linked estimate templates reprice
+
+After kit edits on one tenant, 48 linked estimate templates changed within about 30 minutes, with no template write. Removed lines disappeared, and the templates repriced dynamically. **Treat a kit edit as a customer-facing price change.** Snapshot the linked templates' totals before the write and read them back after it. Details: [`estimate-and-proposal-templates.md`](estimate-and-proposal-templates.md).
+
+### Provider syncs can revert link fixes
+
+Some services come from a provider catalog: `source` names the provider and `externalId` is set. A provider sync can **put back links you removed**. On one tenant, kit fixes made on 2026-08-23 were reverted by a sync on 2026-08-27, and had to be applied again. Before you edit a provider-sourced service:
+
+- Prefer to swap the link to a tenant-owned catalog item instead of editing a provider-owned one.
+- After the fix, seed a **must-not-contain** drift rule (service `<code>` must not link `<skuId>`), so that a nightly job alerts if the link comes back. See [`governed-ingest.md`](governed-ingest.md).
+
+## Quantities and units of measure
+
+`quantity` is in the **material's unit of measure**, not in feet or pieces. Common traps:
+
+- **Pack or coil items.** If the material is a 50 ft coil, a kit that needs 15 ft uses `quantity: 0.3`. One kit had `quantity: 6` on a 50 ft coil, which billed 300 ft on every invoice.
+- **Per-100 (`C`) and per-1,000 (`M`) units.** If an item's cost is per 100 but a kit uses it one at a time, the kit cost is 100× too high. An estimate once stamped a per-100 PVC price as the unit price. Alert on `C`/`M` units with whole-number kit quantities.
+- **Stick lengths.** A kit that needs 100 ft of 20 ft copper sticks uses `quantity: 5`, not `100`.
+
 ## Anti-patterns
 
+- **Linking a kit to an item with `cost = 0`.** Every template that carries the kit drops in price. Hold such links until the item has a cost.
 - **Treating PATCH on `serviceMaterials` as delta.** It's full-array replace. Always GET → modify → PATCH the whole array.
 - **Appending to the array without dedup.** You'll end up with duplicate `{skuId, quantity}` entries that bill twice on the invoice.
 - **Skipping the verify-after-write step.** Like every other ST write, the PATCH can silently drop. Read back and hash-compare.
@@ -210,3 +234,4 @@ These rows are the most likely "$0 invoice line" candidates.
 - [`cost-and-pricing.md`](cost-and-pricing.md) — how `serviceMaterials` carries cost into dynamic-priced services
 - [`configurable-equipment-and-materials.md`](configurable-equipment-and-materials.md) — variant equipment with their own `equipmentMaterialLinks`
 - [`batch-operations.md`](batch-operations.md) — bulk-applying link changes across many services
+- [`governed-ingest.md`](governed-ingest.md) — drift watch for link fixes on provider-sourced services

@@ -50,6 +50,8 @@ This field has three meaningful values: `true`, `false`, `null`. They look simil
 
 In a 317-row audit of active plumbing services (real production tenant, 2026-04-28), every row had `useStaticPrices = null`. Don't write code that branches on `=== false` and silently misses the null case.
 
+> **The public API can show `null` on a service that is actually static (verified 2026-09-27).** In a 99-service read, the internal service read (`GetService`, the cookie-auth API the UI uses) showed `UseStaticPrice = true` on 20 services, and 17 of them were static at **$0**. The public v2 API returned `useStaticPrices: null` on all 20. So `null` on the public API does not prove a service is dynamic. Before you audit or change static pricing, confirm the value from the internal read. The earlier numbers in this section come from the public API and may include rows like these.
+
 ### Inferring pricing model from price/cost shape
 
 Since `useStaticPrices = null` is the most common state, behavior is usually inferred from the (price, cost) shape:
